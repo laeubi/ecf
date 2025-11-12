@@ -36,13 +36,26 @@ mvn test
 
 ## Key Findings
 
-**Important Discovery:** Java 11's HttpClient handles HTTP/2 GOAWAY frames **correctly and gracefully** by automatically opening new connections when the old connection is closed. This is the expected and proper behavior according to HTTP/2 specification.
+**GOAWAY Frames ARE Being Sent:** The server successfully sends HTTP/2 GOAWAY frames, which can be verified in the test output:
+```
+Processing request #1
+Sending GOAWAY frame to client
+GOAWAY frame sent successfully
+```
+
+**Java 11 HttpClient Behavior:** When receiving GOAWAY frames, Java 11's HttpClient handles them **correctly and gracefully** by automatically opening new connections. This is the expected and proper behavior according to HTTP/2 specification (RFC 7540 §6.8).
 
 When an HTTP/2 server sends a GOAWAY frame:
-1. The connection is marked for closure
-2. Java's HttpClient detects this and opens a new connection
-3. Subsequent requests succeed by using the new connection
-4. This behavior is **correct and resilient**
+1. The server logs "Sending GOAWAY frame to client" and "GOAWAY frame sent successfully"
+2. The connection is closed after sending GOAWAY
+3. Java's HttpClient detects the connection closure and opens a new connection
+4. Subsequent requests succeed by using the new connection
+5. This behavior is **correct and resilient**
+
+**Observing GOAWAY in Tests:**
+- Enable HTTP/2 client logging with: `System.setProperty("jdk.httpclient.HttpClient.log", "all");`
+- Set breakpoint in `jdk.internal.net.http.Http2Connection.handleConnectionFrame(Http2Frame)` to observe GOAWAY processing
+- Server logs show GOAWAY being sent successfully
 
 The p2 issue referenced (https://github.com/eclipse-equinox/p2/issues/529) is likely related to:
 - Retry logic and error handling during long-running downloads

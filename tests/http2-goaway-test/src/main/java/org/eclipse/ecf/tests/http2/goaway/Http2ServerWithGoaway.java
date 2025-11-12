@@ -41,8 +41,11 @@ public class Http2ServerWithGoaway {
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private Channel serverChannel;
-    private volatile Http2ServerHandler handler;
     private final CountDownLatch startupLatch = new CountDownLatch(1);
+    
+    // Shared configuration across all handler instances
+    private volatile boolean sendGoawayImmediately = false;
+    private volatile int goawayAfterRequests = -1;
     
     public Http2ServerWithGoaway(int port) {
         this.port = port;
@@ -75,7 +78,11 @@ public class Http2ServerWithGoaway {
              .childHandler(new ChannelInitializer<SocketChannel>() {
                  @Override
                  protected void initChannel(SocketChannel ch) throws Exception {
-                     handler = new Http2ServerHandler();
+                     // Create handler with shared configuration
+                     Http2ServerHandler handler = new Http2ServerHandler(
+                         sendGoawayImmediately, 
+                         goawayAfterRequests
+                     );
                      ch.pipeline().addLast(sslCtx.newHandler(ch.alloc()));
                      ch.pipeline().addLast(new Http2ServerInitializer(handler));
                  }
@@ -98,30 +105,17 @@ public class Http2ServerWithGoaway {
     }
     
     /**
-     * Trigger a GOAWAY frame to be sent on the next request or immediately if connection exists
-     */
-    public void triggerGoaway() {
-        if (handler != null) {
-            handler.triggerGoaway();
-        }
-    }
-    
-    /**
      * Configure whether to send GOAWAY immediately on connection
      */
     public void setSendGoawayImmediately(boolean immediate) {
-        if (handler != null) {
-            handler.setSendGoawayImmediately(immediate);
-        }
+        this.sendGoawayImmediately = immediate;
     }
     
     /**
      * Configure whether to send GOAWAY after N requests
      */
     public void setGoawayAfterRequests(int numRequests) {
-        if (handler != null) {
-            handler.setGoawayAfterRequests(numRequests);
-        }
+        this.goawayAfterRequests = numRequests;
     }
     
     /**

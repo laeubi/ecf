@@ -210,10 +210,12 @@ public class Http2GoawayTest {
         } catch (IOException e) {
             // Or it might fail, which demonstrates the GOAWAY issue
             System.out.println("✓ Request failed with immediate GOAWAY: " + e.getMessage());
+            // The error message varies - could be about closed connection, stream, or peer processing
             assertTrue(e.getMessage().contains("closed") || 
                       e.getMessage().contains("connection") ||
-                      e.getMessage().contains("stream"),
-                      "Exception should mention connection closure: " + e.getMessage());
+                      e.getMessage().contains("stream") ||
+                      e.getMessage().contains("peer"),
+                      "Exception should mention connection/stream issue: " + e.getMessage());
         }
     }
     

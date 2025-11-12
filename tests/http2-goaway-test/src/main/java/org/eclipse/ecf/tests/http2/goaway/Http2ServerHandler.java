@@ -32,16 +32,19 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class Http2ServerHandler extends ChannelInboundHandlerAdapter {
     
-    private volatile boolean shouldSendGoaway = false;
-    private volatile boolean sendGoawayImmediately = false;
-    private volatile int goawayAfterRequests = -1;
+    private final boolean sendGoawayImmediately;
+    private final int goawayAfterRequests;
     private final AtomicInteger requestCount = new AtomicInteger(0);
-    private volatile ChannelHandlerContext savedContext = null;
+    
+    public Http2ServerHandler(boolean sendGoawayImmediately, int goawayAfterRequests) {
+        this.sendGoawayImmediately = sendGoawayImmediately;
+        this.goawayAfterRequests = goawayAfterRequests;
+    }
     
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        savedContext = ctx;
         if (sendGoawayImmediately) {
+            System.out.println("Channel active, sending GOAWAY immediately");
             sendGoaway(ctx);
         }
         super.channelActive(ctx);
@@ -49,24 +52,22 @@ public class Http2ServerHandler extends ChannelInboundHandlerAdapter {
     
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        savedContext = ctx;
-        
         if (msg instanceof Http2HeadersFrame) {
             Http2HeadersFrame headersFrame = (Http2HeadersFrame) msg;
             
             // Increment request count
             int currentCount = requestCount.incrementAndGet();
+            System.out.println("Processing request #" + currentCount);
             
             // Check if we should send GOAWAY after this request
-            boolean sendGoawayNow = shouldSendGoaway || 
-                                    (goawayAfterRequests > 0 && currentCount >= goawayAfterRequests);
+            boolean sendGoawayNow = (goawayAfterRequests > 0 && currentCount >= goawayAfterRequests);
             
             // Send a simple response
-            if (!sendGoawayNow) {
-                sendResponse(ctx, headersFrame);
-            } else {
-                // Send response first, then GOAWAY
-                sendResponse(ctx, headersFrame);
+            sendResponse(ctx, headersFrame);
+            
+            // Send GOAWAY after response if configured
+            if (sendGoawayNow) {
+                System.out.println("Request count reached " + currentCount + ", sending GOAWAY");
                 sendGoaway(ctx);
             }
         }
@@ -97,7 +98,7 @@ public class Http2ServerHandler extends ChannelInboundHandlerAdapter {
      * Send GOAWAY frame
      */
     private void sendGoaway(ChannelHandlerContext ctx) {
-        System.out.println("Sending GOAWAY frame");
+        System.out.println("Sending GOAWAY frame to client");
         DefaultHttp2GoAwayFrame goAwayFrame = new DefaultHttp2GoAwayFrame(Http2Error.NO_ERROR);
         goAwayFrame.setExtraStreamIds(0);
         ctx.writeAndFlush(goAwayFrame).addListener(future -> {
@@ -107,36 +108,14 @@ public class Http2ServerHandler extends ChannelInboundHandlerAdapter {
                 ctx.close();
             } else {
                 System.err.println("Failed to send GOAWAY frame: " + future.cause());
+                future.cause().printStackTrace();
             }
         });
     }
     
-    /**
-     * Trigger GOAWAY on next request or immediately if connection exists
-     */
-    public void triggerGoaway() {
-        shouldSendGoaway = true;
-        if (savedContext != null && savedContext.channel().isActive()) {
-            sendGoaway(savedContext);
-        }
-    }
-    
-    /**
-     * Configure whether to send GOAWAY immediately on connection
-     */
-    public void setSendGoawayImmediately(boolean immediate) {
-        this.sendGoawayImmediately = immediate;
-    }
-    
-    /**
-     * Configure whether to send GOAWAY after N requests
-     */
-    public void setGoawayAfterRequests(int numRequests) {
-        this.goawayAfterRequests = numRequests;
-    }
-    
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        System.err.println("Exception in HTTP/2 handler: " + cause.getMessage());
         cause.printStackTrace();
         ctx.close();
     }
