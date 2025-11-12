@@ -536,7 +536,7 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 			rcfgBuilder.timeout(Duration.ofMillis(getConnectTimeout()));
 			rcfgBuilder.uri(new URI(urlString));
 			rcfgBuilder.GET();
-
+			System.out.println("HttpClientRetrieveFileTransfer.openStreams()");
 			setupAuthentication(urlString);
 
 			// Define a CredentialsProvider - found that possibility while debugging in org.apache.commons.httpclient.HttpMethodDirector.processProxyAuthChallenge(HttpMethod)

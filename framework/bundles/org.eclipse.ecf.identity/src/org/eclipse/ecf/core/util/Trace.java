@@ -285,6 +285,7 @@ public class Trace {
 	 * 
 	 */
 	public static void trace(String pluginId, String message) {
+		System.out.println(pluginId + " - " + message);
 		if (shouldTrace(pluginId))
 			trace(message);
 	}
