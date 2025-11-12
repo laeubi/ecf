@@ -22,6 +22,16 @@ The purpose of this test project is to:
 - Java 11 or higher (for HttpClient and modern Java features)
 - Maven 3.6 or higher
 
+## TLS vs Cleartext HTTP/2
+
+The server supports both TLS (h2) and cleartext (h2c) modes:
+- **TLS mode (default)**: Uses self-signed certificates and ALPN negotiation. This is the standard way HTTP/2 works over HTTPS.
+- **Cleartext mode**: HTTP/2 without encryption (h2c). Can be enabled with `new Http2ServerWithGoaway(port, false)`.
+
+**Note:** Java's HttpClient has limited support for h2c (HTTP/2 cleartext) and requires complex setup with prior knowledge or HTTP/1.1 upgrade. For simplicity and reliability, the tests use TLS mode with self-signed certificates. The self-signed certificate overhead is minimal and ensures proper HTTP/2 negotiation via ALPN.
+
+If you need to avoid SSL complexity for debugging, you can use tools like Wireshark to inspect the HTTP/2 frames even with TLS by using the server's private key for decryption.
+
 ## Building
 
 ```bash
