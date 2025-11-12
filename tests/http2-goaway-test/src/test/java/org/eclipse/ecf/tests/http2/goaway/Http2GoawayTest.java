@@ -12,13 +12,9 @@
  *******************************************************************************/
 package org.eclipse.ecf.tests.http2.goaway;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -27,7 +23,13 @@ import java.net.http.HttpResponse;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 
-import static org.junit.jupiter.api.Assertions.*;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  * Test case to reproduce HTTP/2 GOAWAY handling issues.
@@ -42,6 +44,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * - The p2 issue is likely about retry logic and error handling during long downloads
  */
 public class Http2GoawayTest {
+	static {
+		System.setProperty("jdk.httpclient.HttpClient.log", "all");
+	}
     
     private Http2ServerWithGoaway server;
     private HttpClient httpClient;
@@ -218,12 +223,15 @@ public class Http2GoawayTest {
     private SSLContext createTrustAllSSLContext() throws Exception {
         TrustManager[] trustAllCerts = new TrustManager[] {
             new X509TrustManager() {
-                public X509Certificate[] getAcceptedIssuers() {
+                @Override
+				public X509Certificate[] getAcceptedIssuers() {
                     return new X509Certificate[0];
                 }
-                public void checkClientTrusted(X509Certificate[] certs, String authType) {
+                @Override
+				public void checkClientTrusted(X509Certificate[] certs, String authType) {
                 }
-                public void checkServerTrusted(X509Certificate[] certs, String authType) {
+                @Override
+				public void checkServerTrusted(X509Certificate[] certs, String authType) {
                 }
             }
         };
