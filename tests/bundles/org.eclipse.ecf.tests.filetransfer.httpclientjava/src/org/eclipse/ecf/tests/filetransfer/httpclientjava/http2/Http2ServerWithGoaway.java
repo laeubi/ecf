@@ -28,10 +28,15 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler;
+import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2GoAwayFrame;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
@@ -164,12 +169,14 @@ public class Http2ServerWithGoaway {
         public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
             ChannelPipeline pipeline = ctx.pipeline();
             
+            System.out.println("Setting up HTTP/2 server pipeline with upgrade support");
+            
             // HTTP/1.1 codec for initial handshake and upgrade
             HttpServerCodec sourceCodec = new HttpServerCodec();
-            pipeline.addLast(sourceCodec);
+            pipeline.addLast("http-codec", sourceCodec);
             
             // Aggregator for HTTP/1.1 messages (needed for upgrade)
-            pipeline.addLast(new HttpObjectAggregator(Integer.MAX_VALUE));
+            pipeline.addLast("aggregator", new HttpObjectAggregator(Integer.MAX_VALUE));
             
             // Build HTTP/2 codec
             Http2FrameCodecBuilder http2Builder = Http2FrameCodecBuilder.forServer()
@@ -179,6 +186,7 @@ public class Http2ServerWithGoaway {
             HttpServerUpgradeHandler upgradeHandler = new HttpServerUpgradeHandler(
                 sourceCodec,
                 protocol -> {
+                    System.out.println("Upgrade requested for protocol: " + protocol);
                     if (AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocol)) {
                         return new Http2ServerUpgradeCodec(http2Builder.build(), serverHandler);
                     }
@@ -186,10 +194,62 @@ public class Http2ServerWithGoaway {
                 }
             );
             
-            pipeline.addLast(upgradeHandler);
+            pipeline.addLast("upgrade-handler", upgradeHandler);
+            
+            // Fallback handler for non-upgraded HTTP/1.1 requests
+            pipeline.addLast("http1-fallback", new Http1FallbackHandler(serverHandler.goawayAfter));
             
             // Remove this initializer
             pipeline.remove(this);
+        }
+    }
+    
+    /**
+     * Fallback handler for HTTP/1.1 requests that don't upgrade to HTTP/2
+     */
+    private static final class Http1FallbackHandler extends ChannelInboundHandlerAdapter {
+        private final AtomicInteger goawayAfter;
+        
+        public Http1FallbackHandler(AtomicInteger goawayAfter) {
+            this.goawayAfter = goawayAfter;
+        }
+        
+        @Override
+        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+            if (msg instanceof FullHttpRequest) {
+                System.out.println("Received HTTP/1.1 request (no upgrade): " + ((FullHttpRequest) msg).uri());
+                FullHttpRequest request = (FullHttpRequest) msg;
+                
+                // Send HTTP/1.1 response
+                ByteBuf content = Unpooled.copiedBuffer("Hello from HTTP/2 server (HTTP/1.1 fallback)", CharsetUtil.UTF_8);
+                DefaultFullHttpResponse response = new DefaultFullHttpResponse(
+                    HttpVersion.HTTP_1_1,
+                    HttpResponseStatus.OK,
+                    content
+                );
+                response.headers().set(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.TEXT_PLAIN);
+                response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.readableBytes());
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
+                
+                ctx.writeAndFlush(response).addListener(future -> {
+                    if (goawayAfter.decrementAndGet() == 0) {
+                        System.out.println("Request count reached, closing connection");
+                    }
+                    ctx.close();
+                });
+                
+                request.release();
+            } else {
+                System.out.println("Passing through message of type: " + msg.getClass().getName());
+                super.channelRead(ctx, msg);
+            }
+        }
+        
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+            System.err.println("Exception in HTTP/1.1 fallback handler: " + cause.getMessage());
+            cause.printStackTrace();
+            ctx.close();
         }
     }
     
@@ -211,6 +271,7 @@ public class Http2ServerWithGoaway {
         
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+            System.out.println("Http2ServerHandler received message of type: " + msg.getClass().getName());
             if (msg instanceof Http2HeadersFrame) {
                 Http2HeadersFrame headersFrame = (Http2HeadersFrame) msg;
     			sendResponse(ctx, headersFrame);
@@ -218,6 +279,9 @@ public class Http2ServerWithGoaway {
     				System.out.println("Request count reached , sending GOAWAY");
                     sendGoaway(ctx);
                 }
+            } else {
+                System.out.println("Http2ServerHandler: Not an Http2HeadersFrame, passing through");
+                super.channelRead(ctx, msg);
             }
         }
         
