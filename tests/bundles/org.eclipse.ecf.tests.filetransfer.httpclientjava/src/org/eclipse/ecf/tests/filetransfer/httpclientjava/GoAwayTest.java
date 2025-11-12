@@ -65,7 +65,7 @@ public class GoAwayTest extends AbstractRetrieveTestCase {
 	}
 
 	public void testReceive() throws Exception {
-		String url = "http://localhost:8433/test";
+		String url = "https://localhost:8433/test";
 		final IFileTransferListener listener = createFileTransferListener();
 		final IFileID fileID = createFileID(new URL(url));
 		getRetrieveAdapter().sendRetrieveRequest(fileID, listener, null);

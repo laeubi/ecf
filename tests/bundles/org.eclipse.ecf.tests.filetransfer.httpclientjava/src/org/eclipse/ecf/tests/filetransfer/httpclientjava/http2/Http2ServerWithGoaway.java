@@ -77,21 +77,21 @@ public class Http2ServerWithGoaway {
     }
     
     /**
-     * Start the HTTP/2 server in cleartext mode with HTTP/1.1 upgrade support
+     * Start the HTTP/2 server with TLS and ALPN for HTTP/2 negotiation
      */
     @SuppressWarnings("deprecation")
     public void start() throws Exception {
-        // Note: SSL/TLS commented out for cleartext h2c with HTTP/1.1 upgrade
-		// SelfSignedCertificate ssc = new SelfSignedCertificate();
-//        SslContext sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey())
-//            .sslProvider(SslProvider.JDK)
-//            .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
-//            .applicationProtocolConfig(new ApplicationProtocolConfig(
-//                ApplicationProtocolConfig.Protocol.ALPN,
-//                ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
-//                ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
-//                ApplicationProtocolNames.HTTP_2))
-//            .build();
+        // Create SSL context for HTTP/2 with self-signed certificate
+		SelfSignedCertificate ssc = new SelfSignedCertificate();
+        SslContext sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey())
+            .sslProvider(SslProvider.JDK)
+            .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
+            .applicationProtocolConfig(new ApplicationProtocolConfig(
+                ApplicationProtocolConfig.Protocol.ALPN,
+                ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+                ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+                ApplicationProtocolNames.HTTP_2))
+            .build();
         
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
@@ -107,14 +107,15 @@ public class Http2ServerWithGoaway {
                      Http2ServerHandler handler = new Http2ServerHandler(                   
                          goawayAfterRequests
                      );
-//                     ch.pipeline().addLast(sslCtx.newHandler(ch.alloc()));
+                     // Add SSL handler for HTTPS
+                     ch.pipeline().addLast(sslCtx.newHandler(ch.alloc()));
                      ch.pipeline().addLast(new Http2ServerInitializer(handler));
                  }
              });
             
             serverChannel = b.bind(port).sync().channel();
             startupLatch.countDown();
-            System.out.println("HTTP/2 Server started on port " + port + " (cleartext h2c with HTTP/1.1 upgrade)");
+            System.out.println("HTTP/2 Server started on port " + port + " (TLS with ALPN for HTTP/2)");
         } catch (Exception e) {
             shutdown();
             throw e;
@@ -169,35 +170,15 @@ public class Http2ServerWithGoaway {
         public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
             ChannelPipeline pipeline = ctx.pipeline();
             
-            System.out.println("Setting up HTTP/2 server pipeline with upgrade support");
+            System.out.println("Setting up HTTP/2 server pipeline with ALPN (TLS)");
             
-            // HTTP/1.1 codec for initial handshake and upgrade
-            HttpServerCodec sourceCodec = new HttpServerCodec();
-            pipeline.addLast("http-codec", sourceCodec);
+            // Build HTTP/2 frame codec - ALPN negotiated HTTP/2 over TLS
+            ctx.pipeline().addLast(Http2FrameCodecBuilder.forServer()
+                .initialSettings(Http2Settings.defaultSettings())
+                .build());
             
-            // Aggregator for HTTP/1.1 messages (needed for upgrade)
-            pipeline.addLast("aggregator", new HttpObjectAggregator(Integer.MAX_VALUE));
-            
-            // Build HTTP/2 codec
-            Http2FrameCodecBuilder http2Builder = Http2FrameCodecBuilder.forServer()
-                .initialSettings(Http2Settings.defaultSettings());
-            
-            // HTTP/2 upgrade handler - supports HTTP/1.1 Upgrade: h2c
-            HttpServerUpgradeHandler upgradeHandler = new HttpServerUpgradeHandler(
-                sourceCodec,
-                protocol -> {
-                    System.out.println("Upgrade requested for protocol: " + protocol);
-                    if (AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocol)) {
-                        return new Http2ServerUpgradeCodec(http2Builder.build(), serverHandler);
-                    }
-                    return null;
-                }
-            );
-            
-            pipeline.addLast("upgrade-handler", upgradeHandler);
-            
-            // Fallback handler for non-upgraded HTTP/1.1 requests
-            pipeline.addLast("http1-fallback", new Http1FallbackHandler(serverHandler.goawayAfter));
+            // Add our custom handler
+            ctx.pipeline().addLast(serverHandler);
             
             // Remove this initializer
             pipeline.remove(this);
