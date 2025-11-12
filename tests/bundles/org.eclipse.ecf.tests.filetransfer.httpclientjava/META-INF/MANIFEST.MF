@@ -16,5 +16,6 @@ Require-Bundle: org.eclipse.ecf.provider.filetransfer.httpclientjava;bundle-vers
  io.netty.codec-http2;bundle-version="4.2.7",
  io.netty.common;bundle-version="4.2.7",
  io.netty.handler;bundle-version="4.2.7"
-Import-Package: javax.net.ssl
+Import-Package: javax.net.ssl,
+ org.eclipse.ecf.filetransfer.events;version="[5.0.0,6.0.0)"
 

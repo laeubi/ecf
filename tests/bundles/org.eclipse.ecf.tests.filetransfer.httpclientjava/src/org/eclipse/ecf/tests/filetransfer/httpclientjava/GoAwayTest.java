@@ -22,7 +22,6 @@ public class GoAwayTest extends AbstractRetrieveTestCase {
 	protected void setUp() throws Exception {
 		super.setUp();
 		tmpFile = Files.createTempFile("ECFTest", "").toFile();
-
 	    server = new Http2ServerWithGoaway(8433);
         // Start server in a separate thread
         Thread serverThread = new Thread(() -> {
