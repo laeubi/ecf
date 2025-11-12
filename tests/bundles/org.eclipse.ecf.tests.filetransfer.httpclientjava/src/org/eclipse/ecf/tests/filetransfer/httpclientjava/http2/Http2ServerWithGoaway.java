@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2025 Christoph Läubrich and others.
+ * Copyright (c) 2025 Christoph Lï¿½ubrich and others.
  *
  * This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License 2.0
@@ -23,19 +23,25 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler;
 import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2GoAwayFrame;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
+import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2HeadersFrame;
 import io.netty.handler.codec.http2.Http2SecurityUtil;
+import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolNames;
@@ -44,6 +50,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
+import io.netty.util.AsciiString;
 import io.netty.util.CharsetUtil;
 
 /**
@@ -65,12 +72,12 @@ public class Http2ServerWithGoaway {
     }
     
     /**
-     * Start the HTTP/2 server with SSL/TLS (required for HTTP/2)
+     * Start the HTTP/2 server in cleartext mode with HTTP/1.1 upgrade support
      */
     @SuppressWarnings("deprecation")
     public void start() throws Exception {
-        // Create SSL context for HTTP/2
-		SelfSignedCertificate ssc = new SelfSignedCertificate();
+        // Note: SSL/TLS commented out for cleartext h2c with HTTP/1.1 upgrade
+		// SelfSignedCertificate ssc = new SelfSignedCertificate();
 //        SslContext sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey())
 //            .sslProvider(SslProvider.JDK)
 //            .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
@@ -102,7 +109,7 @@ public class Http2ServerWithGoaway {
             
             serverChannel = b.bind(port).sync().channel();
             startupLatch.countDown();
-            System.out.println("HTTP/2 Server started on port " + port);
+            System.out.println("HTTP/2 Server started on port " + port + " (cleartext h2c with HTTP/1.1 upgrade)");
         } catch (Exception e) {
             shutdown();
             throw e;
@@ -155,16 +162,34 @@ public class Http2ServerWithGoaway {
         
         @Override
         public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-            // Build HTTP/2 frame codec - using default connection
-            ctx.pipeline().addLast(Http2FrameCodecBuilder.forServer()
-                .initialSettings(Http2Settings.defaultSettings())
-                .build());
+            ChannelPipeline pipeline = ctx.pipeline();
             
-            // Add our custom handler
-            ctx.pipeline().addLast(serverHandler);
+            // HTTP/1.1 codec for initial handshake and upgrade
+            HttpServerCodec sourceCodec = new HttpServerCodec();
+            pipeline.addLast(sourceCodec);
             
-            // Remove this initializer as it's no longer needed
-            ctx.pipeline().remove(this);
+            // Aggregator for HTTP/1.1 messages (needed for upgrade)
+            pipeline.addLast(new HttpObjectAggregator(Integer.MAX_VALUE));
+            
+            // Build HTTP/2 codec
+            Http2FrameCodecBuilder http2Builder = Http2FrameCodecBuilder.forServer()
+                .initialSettings(Http2Settings.defaultSettings());
+            
+            // HTTP/2 upgrade handler - supports HTTP/1.1 Upgrade: h2c
+            HttpServerUpgradeHandler upgradeHandler = new HttpServerUpgradeHandler(
+                sourceCodec,
+                protocol -> {
+                    if (AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocol)) {
+                        return new Http2ServerUpgradeCodec(http2Builder.build(), serverHandler);
+                    }
+                    return null;
+                }
+            );
+            
+            pipeline.addLast(upgradeHandler);
+            
+            // Remove this initializer
+            pipeline.remove(this);
         }
     }
     
