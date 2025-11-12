@@ -13,9 +13,7 @@
 package org.eclipse.ecf.tests.http2.goaway;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -45,7 +43,7 @@ import org.junit.jupiter.api.Test;
  */
 public class Http2GoawayTest {
 	static {
-		System.setProperty("jdk.httpclient.HttpClient.log", "all");
+//		System.setProperty("jdk.httpclient.HttpClient.log", "all");
 	}
     
     private Http2ServerWithGoaway server;
@@ -126,7 +124,7 @@ public class Http2GoawayTest {
         System.out.println("✓ First request completed, server will send GOAWAY after this");
         
         // Wait a bit for GOAWAY to be processed
-        Thread.sleep(1000);
+//        Thread.sleep(1000);
         
         // Second request - Java HttpClient will open a new connection
         // This demonstrates that Java HttpClient HANDLES GOAWAY correctly
@@ -172,7 +170,7 @@ public class Http2GoawayTest {
         System.out.println("✓ Request 2 completed, server will send GOAWAY after this");
         
         // Wait for GOAWAY to be processed
-        Thread.sleep(1000);
+//        Thread.sleep(1000);
         
         // Third request - will succeed with new connection
         HttpRequest request3 = HttpRequest.newBuilder()
@@ -202,22 +200,11 @@ public class Http2GoawayTest {
             .timeout(Duration.ofSeconds(5))
             .build();
         
-        try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             // If it succeeds, it means HttpClient opened a new connection
             System.out.println("✓ Request succeeded despite immediate GOAWAY (new connection opened)");
             assertEquals(200, response.statusCode());
-        } catch (IOException e) {
-            // Or it might fail, which demonstrates the GOAWAY issue
-            System.out.println("✓ Request failed with immediate GOAWAY: " + e.getMessage());
-            // The error message varies - could be about closed connection, stream, or peer processing
-            assertTrue(e.getMessage().contains("closed") || 
-                      e.getMessage().contains("connection") ||
-                      e.getMessage().contains("stream") ||
-                      e.getMessage().contains("peer"),
-                      "Exception should mention connection/stream issue: " + e.getMessage());
-        }
-    }
+		}
     
     /**
      * Create an SSLContext that trusts all certificates (for testing with self-signed certs)

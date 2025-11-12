@@ -12,6 +12,8 @@
  *******************************************************************************/
 package org.eclipse.ecf.tests.http2.goaway;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -25,20 +27,17 @@ import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2HeadersFrame;
 import io.netty.util.CharsetUtil;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 /**
  * HTTP/2 handler that processes requests and can send GOAWAY frames
  */
 public class Http2ServerHandler extends ChannelInboundHandlerAdapter {
     
     private final boolean sendGoawayImmediately;
-    private final int goawayAfterRequests;
-    private final AtomicInteger requestCount = new AtomicInteger(0);
+	private AtomicInteger goawayAfter;
     
-    public Http2ServerHandler(boolean sendGoawayImmediately, int goawayAfterRequests) {
+	public Http2ServerHandler(boolean sendGoawayImmediately, AtomicInteger goawayAfter) {
         this.sendGoawayImmediately = sendGoawayImmediately;
-        this.goawayAfterRequests = goawayAfterRequests;
+		this.goawayAfter = goawayAfter;
     }
     
     @Override
@@ -56,18 +55,15 @@ public class Http2ServerHandler extends ChannelInboundHandlerAdapter {
             Http2HeadersFrame headersFrame = (Http2HeadersFrame) msg;
             
             // Increment request count
-            int currentCount = requestCount.incrementAndGet();
-            System.out.println("Processing request #" + currentCount);
-            
             // Check if we should send GOAWAY after this request
-            boolean sendGoawayNow = (goawayAfterRequests > 0 && currentCount >= goawayAfterRequests);
+			boolean sendGoawayNow = goawayAfter.decrementAndGet() == 0;
             
             // Send a simple response
             sendResponse(ctx, headersFrame);
             
             // Send GOAWAY after response if configured
             if (sendGoawayNow) {
-                System.out.println("Request count reached " + currentCount + ", sending GOAWAY");
+				System.out.println("Request count reached , sending GOAWAY");
                 sendGoaway(ctx);
             }
         }

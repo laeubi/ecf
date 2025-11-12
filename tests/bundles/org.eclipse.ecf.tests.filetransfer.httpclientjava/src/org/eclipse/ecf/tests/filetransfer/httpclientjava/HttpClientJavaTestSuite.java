@@ -36,7 +36,7 @@ import org.junit.runners.Suite;
 @Suite.SuiteClasses({ FileBrowseTest.class, FileIDFactoryTest.class, FileSendTest.class, GetRemoteFileNameTest.class,
 		NamespaceTest.class, URIProtocolFactoryRetrieveTest.class, URLBrowseTest.class, URLCancelTest.class,
 		URLPartialRetrieveTest.class, URLRetrievePauseResumeTest.class, URLRetrieveTest.class,
-		HttpClientGetPortFromURLTest.class })
+		HttpClientGetPortFromURLTest.class, GoAwayTest.class })
 public class HttpClientJavaTestSuite extends URLConnectionTestSuite {
 
 }

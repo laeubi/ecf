@@ -12,6 +12,9 @@
  *******************************************************************************/
 package org.eclipse.ecf.tests.http2.goaway;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
@@ -29,8 +32,6 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 
-import java.util.concurrent.CountDownLatch;
-
 /**
  * HTTP/2 server that can send GOAWAY frames on demand.
  * This server is used to test client behavior when receiving GOAWAY frames.
@@ -47,7 +48,7 @@ public class Http2ServerWithGoaway {
     
     // Shared configuration across all handler instances
     private volatile boolean sendGoawayImmediately = false;
-    private volatile int goawayAfterRequests = -1;
+	private AtomicInteger goawayAfterRequests = new AtomicInteger(-1);
     
     /**
      * Create HTTP/2 server with TLS enabled
@@ -137,7 +138,7 @@ public class Http2ServerWithGoaway {
      * Configure whether to send GOAWAY after N requests
      */
     public void setGoawayAfterRequests(int numRequests) {
-        this.goawayAfterRequests = numRequests;
+		this.goawayAfterRequests.set(numRequests);
     }
     
     /**
