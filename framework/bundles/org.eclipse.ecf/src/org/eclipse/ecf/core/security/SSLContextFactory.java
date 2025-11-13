@@ -17,7 +17,7 @@ import java.security.Provider;
 import javax.net.ssl.SSLContext;
 
 /**
- * This class exposes three legacy static methods from the {@link SSLContext} class as 
+ * This class exposes legacy static methods from the {@link SSLContext} class as 
  * methods on an implementing instance.  Implementing instances should be registered
  * as OSGi services.
  * 
