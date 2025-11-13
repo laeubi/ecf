@@ -1,119 +1,54 @@
+/****************************************************************************
+ * Copyright (c) 2025 Christoph Läubrich and others.
+ *
+ * This program and the accompanying materials are made
+ * available under the terms of the Eclipse Public License 2.0
+ * which is available at https://www.eclipse.org/legal/epl-2.0/
+ *
+ * Contributors:
+ *    Christoph Läubrich - initial API and implementation
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ *****************************************************************************/
 package org.eclipse.ecf.tests.filetransfer.httpclientjava;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
-import java.util.Dictionary;
-import java.util.Hashtable;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-
-import org.eclipse.ecf.core.security.SSLContextFactory;
 import org.eclipse.ecf.filetransfer.IFileTransferListener;
 import org.eclipse.ecf.filetransfer.events.IFileTransferConnectStartEvent;
-import org.eclipse.ecf.filetransfer.events.IIncomingFileTransferReceiveDataEvent;
+import org.eclipse.ecf.filetransfer.events.IIncomingFileTransferReceiveDoneEvent;
 import org.eclipse.ecf.filetransfer.events.IIncomingFileTransferReceiveStartEvent;
 import org.eclipse.ecf.filetransfer.identity.IFileID;
 import org.eclipse.ecf.tests.filetransfer.AbstractRetrieveTestCase;
 import org.eclipse.ecf.tests.filetransfer.httpclientjava.http2.Http2ServerWithGoaway;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.Constants;
-import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.ServiceRegistration;
+import org.eclipse.ecf.tests.filetransfer.httpclientjava.http2.TrustAllSSLContextFactory;
 
 public class GoAwayTest extends AbstractRetrieveTestCase {
-	
-	File tmpFile = null;
+
+	private File tmpFile;
 	private Http2ServerWithGoaway server;
-	private ServiceRegistration<SSLContextFactory> sslContextFactoryRegistration;
+	private TrustAllSSLContextFactory sslContextFactory;
 
 	protected void setUp() throws Exception {
 		super.setUp();
 		tmpFile = Files.createTempFile("ECFTest", "").toFile();
-		
-		// Register a custom SSLContextFactory that trusts all certificates
-		BundleContext context = FrameworkUtil.getBundle(getClass()).getBundleContext();
-		SSLContextFactory trustAllFactory = new SSLContextFactory() {
-			private final SSLContext trustAllContext = createTrustAllSSLContext();
-			
-			@Override
-			public SSLContext getDefault() throws NoSuchAlgorithmException {
-				return trustAllContext;
-			}
-			
-			@Override
-			public SSLContext getInstance(String protocol) throws NoSuchAlgorithmException {
-				return trustAllContext;
-			}
-			
-			@Override
-			public SSLContext getInstance(String protocol, String providerName) throws NoSuchAlgorithmException {
-				return trustAllContext;
-			}
-			
-			private SSLContext createTrustAllSSLContext() throws NoSuchAlgorithmException {
-				try {
-					SSLContext ctx = SSLContext.getInstance("TLS");
-					ctx.init(null, new TrustManager[] { new X509TrustManager() {
-						@Override
-						public void checkClientTrusted(X509Certificate[] chain, String authType) {
-							// Trust all
-						}
-						
-						@Override
-						public void checkServerTrusted(X509Certificate[] chain, String authType) {
-							// Trust all
-						}
-						
-						@Override
-						public X509Certificate[] getAcceptedIssuers() {
-							return new X509Certificate[0];
-						}
-					}}, null);
-					return ctx;
-				} catch (Exception e) {
-					throw new NoSuchAlgorithmException("Failed to create trust-all SSL context", e);
-				}
-			}
-		};
-		
-		Dictionary<String, Object> properties = new Hashtable<>();
-		properties.put(Constants.SERVICE_RANKING, 100);
-		sslContextFactoryRegistration = context.registerService(SSLContextFactory.class, trustAllFactory, properties);
-		
-	    server = new Http2ServerWithGoaway(8433);
-        // Start server in a separate thread
-        Thread serverThread = new Thread(() -> {
-            try {
-                server.start();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-        serverThread.setDaemon(true);
-        serverThread.start();
-        
-        // Wait for server to start
-        server.awaitStartup();
-        Thread.sleep(1000); // Give server time to fully initialize
+		sslContextFactory = new TrustAllSSLContextFactory();
+		server = new Http2ServerWithGoaway(8433);
 	}
-	
+
 	@Override
 	protected void tearDown() throws Exception {
 		super.tearDown();
 		tmpFile.delete();
 		server.shutdown();
-		if (sslContextFactoryRegistration != null) {
-			sslContextFactoryRegistration.unregister();
-		}
+		sslContextFactory.dispose();
 	}
-	
+
 	protected void handleStartConnectEvent(IFileTransferConnectStartEvent event) {
 		super.handleStartConnectEvent(event);
 	}
@@ -124,7 +59,7 @@ public class GoAwayTest extends AbstractRetrieveTestCase {
 		assertNotNull(event.getFileID().getFilename());
 		Map<?, ?> responseHeaders = event.getResponseHeaders();
 		assertNotNull(responseHeaders);
-		trace("responseHeaders="+responseHeaders);
+		trace("responseHeaders=" + responseHeaders);
 		try {
 			incomingFileTransfer = event.receive(tmpFile);
 		} catch (final IOException e) {
@@ -132,19 +67,47 @@ public class GoAwayTest extends AbstractRetrieveTestCase {
 		}
 	}
 
-	public void testReceive() throws Exception {
-		String url = "https://localhost:8433/test";
+	public void testOk() throws Exception {
+		server.reset();
+		receiveFile();
+		server.assertDataWasSend();
+		onErrorThrow();
+	}
+
+	public void testImmediatetGoaway() throws Exception {
+		server.reset();
+		server.setGoawayAfterRequests(0);
+		receiveFile();
+		server.assertGoawayWasSend();
+		onErrorThrow();
+	}
+
+	public void testGoawayOnSecondRequest() throws Exception {
+		server.reset();
+		server.setGoawayAfterRequests(1);
+		receiveFile();
+		server.assertDataWasSend();
+		onErrorThrow();
+		done = false;
+		doneEvents.clear();
+		receiveFile();
+		server.assertGoawayWasSend();
+		onErrorThrow();
+	}
+
+	private void receiveFile() throws Exception {
+		tmpFile.delete();
 		final IFileTransferListener listener = createFileTransferListener();
-		final IFileID fileID = createFileID(new URL(url));
+		final IFileID fileID = createFileID(new URL("https://localhost:" + server.getPort() + "/test"));
 		getRetrieveAdapter().sendRetrieveRequest(fileID, listener, null);
+		waitForDone((int) TimeUnit.SECONDS.toMillis(10));
+	}
 
-		waitForDone(360000);
-
-		assertHasEvent(startEvents, IIncomingFileTransferReceiveStartEvent.class);
-		assertHasMoreThanEventCount(dataEvents, IIncomingFileTransferReceiveDataEvent.class, 0);
-		assertDoneOK();
-
-		assertTrue(tmpFile.exists());
-		assertTrue(tmpFile.length() > 0);
+	private void onErrorThrow() throws Exception {
+		IIncomingFileTransferReceiveDoneEvent doneEvent = getDoneEvent();
+		Exception exception = doneEvent.getException();
+		if (exception != null) {
+			throw new AssertionError(exception);
+		}
 	}
 }
