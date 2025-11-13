@@ -946,8 +946,12 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 				Trace.catching(Activator.PLUGIN_ID, DebugOptions.EXCEPTIONS_CATCHING, this.getClass(), "openStreamsForResume", e); //$NON-NLS-1$
 				lastException = e;
 				
+				System.out.println("Exception caught in openStreamsForResume: " + e.getClass().getName() + ": " + e.getMessage());
+				System.out.println("Is retryable: " + isRetryableException(e) + ", attempt " + attemptCount + " of " + maxAttempts);
+				
 				// Check if we should retry
 				if (attemptCount < maxAttempts && isRetryableException(e)) {
+					System.out.println("Retrying resume due to: " + e.getMessage());
 					Trace.trace(Activator.PLUGIN_ID, "Retryable exception on resume attempt " + attemptCount + ": " + e.getMessage()); //$NON-NLS-1$ //$NON-NLS-2$
 					continue; // Retry
 				}
@@ -1182,6 +1186,11 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 						System.out.println("GOAWAY detected in stacktrace: " + className + "." + methodName);
 						return true;
 					}
+					// Also check for other HTTP/2 connection closing methods
+					if (className.contains("Http2") && (methodName.contains("goAway") || methodName.contains("GoAway"))) {
+						System.out.println("GOAWAY detected in stacktrace (alt): " + className + "." + methodName);
+						return true;
+					}
 				}
 			}
 		}
@@ -1235,22 +1244,35 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 		
 		// GOAWAY should be treated as a temporary condition similar to timeout
 		if (isGoAwayException(e)) {
+			System.out.println("GOAWAY exception detected - marking as retryable");
 			Trace.trace(Activator.PLUGIN_ID, "GOAWAY detected - treating as retryable temporary error"); //$NON-NLS-1$
 			return true;
 		}
 		
 		// Other IOExceptions might also be retryable for idempotent requests
 		if (e instanceof IOException) {
+			System.out.println("IOException detected - marking as retryable: " + e.getClass().getName());
 			return true;
 		}
 		
 		if (e instanceof ExecutionException) {
 			Throwable cause = e.getCause();
 			if (cause instanceof IOException) {
+				System.out.println("ExecutionException with IOException cause - marking as retryable");
 				return true;
 			}
 		}
 		
+		// Check if it's an IncomingFileTransferException wrapping a retryable exception
+		if (e instanceof IncomingFileTransferException) {
+			Throwable cause = e.getCause();
+			if (cause instanceof Exception) {
+				System.out.println("Checking wrapped exception: " + cause.getClass().getName());
+				return isRetryableException((Exception) cause);
+			}
+		}
+		
+		System.out.println("Exception not retryable: " + e.getClass().getName());
 		return false;
 	}
 
