@@ -16,6 +16,7 @@ package org.eclipse.ecf.internal.provider.filetransfer.httpclientjava;
 import java.net.Authenticator;
 import java.net.http.HttpClient;
 import java.net.http.HttpClient.Redirect;
+import java.net.http.HttpClient.Version;
 import java.net.http.HttpRequest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
@@ -51,7 +52,7 @@ public class ECFHttpClientFactory implements IHttpClientFactory {
 
 	@Override
 	public HttpClient.Builder newClient() {
-		HttpClient.Builder builder = HttpClient.newBuilder().followRedirects(Redirect.NORMAL);
+		HttpClient.Builder builder = HttpClient.newBuilder().version(Version.HTTP_2).followRedirects(Redirect.NORMAL);
 		String sslContextProvider = HttpClientOptions.HTTPCLIENT_SSLCONTEXT_PROVIDER;
 		String sslContextProtocol = HttpClientOptions.HTTPCLIENT_SSLCONTEXT_PROTOCOL;
 		SSLContextFactory sslContextFactory = Activator.getDefault().getSSLContextFactory();

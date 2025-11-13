@@ -12,7 +12,7 @@
  *  Henrich Kraemer - bug 263613, [transport] Update site contacting / downloading is not cancelable
  *  Thomas Joiner   - HttpClient 4 implementation
  *  Yatta Solutions - HttpClient 4.5 implementation
- *  Christoph Läubrich - Java HTTP client implementation
+ *  Christoph Lï¿½ubrich - Java HTTP client implementation
  *
  * SPDX-License-Identifier: EPL-2.0
  *****************************************************************************/
@@ -529,111 +529,155 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 		final String urlString = getRemoteFileURL().toString();
 		this.doneFired = false;
 
-		int code = -1;
+		Exception lastException = null;
+		int attemptCount = 0;
+		int maxAttempts = MAX_RETRY + 1; // MAX_RETRY is number of retries, so total attempts = retries + 1
 
-		try {
-			HttpRequest.Builder rcfgBuilder = getRequestConfigBuilder();
-			rcfgBuilder.timeout(Duration.ofMillis(getConnectTimeout()));
-			rcfgBuilder.uri(new URI(urlString));
-			rcfgBuilder.GET();
+		// Retry loop for idempotent methods
+		while (attemptCount < maxAttempts) {
+			attemptCount++;
+			int code = -1;
 
-			setupAuthentication(urlString);
-
-			// Define a CredentialsProvider - found that possibility while debugging in org.apache.commons.httpclient.HttpMethodDirector.processProxyAuthChallenge(HttpMethod)
-			// Seems to be another way to select the credentials.
-			setRequestHeaderValues(rcfgBuilder);
-
-			Trace.trace(Activator.PLUGIN_ID, "retrieve=" + urlString); //$NON-NLS-1$
-			// Set request header for possible gzip encoding, but only if
-			// 1) The file range specification is null (we want the whole file)
-			// 2) The target remote file does *not* end in .gz (see bug https://bugs.eclipse.org/bugs/show_bug.cgi?id=280205)
-			boolean contentCompressionEnabled;
-			if (getFileRangeSpecification() == null && !targetHasGzSuffix(super.getRemoteFileName())) {
-				// The interceptors to provide gzip are always added and are enabled by default
-				Trace.trace(Activator.PLUGIN_ID, "Accept-Encoding: gzip,deflate added to request header"); //$NON-NLS-1$
-				setContentCompressionEnabled(rcfgBuilder, true);
-				contentCompressionEnabled = true;
-			} else {
-				// Disable the interceptors to provide gzip
-				Trace.trace(Activator.PLUGIN_ID, "Accept-Encoding NOT added to header"); //$NON-NLS-1$
-				setContentCompressionEnabled(rcfgBuilder, false);
-				contentCompressionEnabled = false;
-			}
-			httpRequest = rcfgBuilder.build();
-
-			fireConnectStartEvent();
-			if (checkAndHandleDone()) {
-				return;
-			}
-
-			// Actually execute get and get response code (since redirect is set to true, then
-			// redirect response code handled internally
-			if (connectJob == null) {
-				performConnect(new NullProgressMonitor());
-			} else {
-				connectJob.schedule();
-				connectJob.join();
-				connectJob = null;
-			}
-			if (checkAndHandleDone()) {
-				return;
-			}
-
-			code = responseCode;
-
-			responseHeaders = getResponseHeaders();
-
-			Trace.trace(Activator.PLUGIN_ID, "retrieve resp=" + code); //$NON-NLS-1$
-
-			// Check for NTLM proxy in response headers
-			// This check is to deal with bug https://bugs.eclipse.org/bugs/show_bug.cgi?id=252002
-			boolean ntlmProxyFound = NTLMProxyDetector.detectNTLMProxy(httpContext);
-			if (ntlmProxyFound)
-				ECFHttpClientFactory.getNTLMProxyHandler(httpContext).handleNTLMProxy(getProxy(), code);
-
-			if (NTLMProxyDetector.detectSPNEGOProxy(httpContext))
-				ECFHttpClientFactory.getNTLMProxyHandler(httpContext).handleSPNEGOProxy(getProxy(), code);
-
-			if (code == HttpURLConnection.HTTP_PARTIAL || code == HttpURLConnection.HTTP_OK) {
-				getResponseHeaderValues();
-				HttpResponse<InputStream> response = httpResponse.join();
-				InputStream body = response.body();
-				if (contentCompressionEnabled) {
-					if (GZIP_ENCODING
-							.equalsIgnoreCase(response.headers().firstValue(CONTENT_ENCODING_HEADER).orElse(null))) {
-						body = new GZIPInputStream(body);
+			try {
+				if (attemptCount > 1) {
+					Trace.trace(Activator.PLUGIN_ID, "Retry attempt " + attemptCount + " of " + maxAttempts + " for " + urlString); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					// Brief delay between retries to allow transient conditions to clear
+					try {
+						Thread.sleep(100 * (attemptCount - 1)); // Progressive backoff: 0ms, 100ms, 200ms
+					} catch (InterruptedException ie) {
+						Thread.currentThread().interrupt();
+						throw new IncomingFileTransferException("Interrupted during retry", ie);
 					}
 				}
-				setInputStream(body);
-				fireReceiveStartEvent();
-			} else if (code == HttpURLConnection.HTTP_NOT_FOUND) {
-				consume(httpResponse);
-				throw new IncomingFileTransferException(NLS.bind("File not found: {0}", urlString), code); //$NON-NLS-1$
-			} else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
-				consume(httpResponse);
-				throw new IncomingFileTransferException(Messages.HttpClientRetrieveFileTransfer_Unauthorized, code);
-			} else if (code == HttpURLConnection.HTTP_FORBIDDEN) {
-				consume(httpResponse);
-				throw new IncomingFileTransferException("Forbidden", code); //$NON-NLS-1$
-			} else if (code == HttpURLConnection.HTTP_PROXY_AUTH) {
-				consume(httpResponse);
-				throw new IncomingFileTransferException(Messages.HttpClientRetrieveFileTransfer_Proxy_Auth_Required, code);
-			} else {
-				consume(httpResponse);
-				throw new IncomingFileTransferException(NLS.bind(Messages.HttpClientRetrieveFileTransfer_ERROR_GENERAL_RESPONSE_CODE, Integer.valueOf(code)), code);
-			}
-		} catch (final Exception e) {
-			Trace.throwing(Activator.PLUGIN_ID, DebugOptions.EXCEPTIONS_THROWING, this.getClass(), "openStreams", e); //$NON-NLS-1$
-			if (code == -1) {
-				if (!isDone()) {
-					setDoneException(e);
+
+				HttpRequest.Builder rcfgBuilder = getRequestConfigBuilder();
+				rcfgBuilder.timeout(Duration.ofMillis(getConnectTimeout()));
+				rcfgBuilder.uri(new URI(urlString));
+				rcfgBuilder.GET();
+				System.out.println("HttpClientRetrieveFileTransfer.openStreams()");
+				setupAuthentication(urlString);
+
+				// Define a CredentialsProvider - found that possibility while debugging in org.apache.commons.httpclient.HttpMethodDirector.processProxyAuthChallenge(HttpMethod)
+				// Seems to be another way to select the credentials.
+				setRequestHeaderValues(rcfgBuilder);
+
+				Trace.trace(Activator.PLUGIN_ID, "retrieve=" + urlString); //$NON-NLS-1$
+				// Set request header for possible gzip encoding, but only if
+				// 1) The file range specification is null (we want the whole file)
+				// 2) The target remote file does *not* end in .gz (see bug https://bugs.eclipse.org/bugs/show_bug.cgi?id=280205)
+				boolean contentCompressionEnabled;
+				if (getFileRangeSpecification() == null && !targetHasGzSuffix(super.getRemoteFileName())) {
+					// The interceptors to provide gzip are always added and are enabled by default
+					Trace.trace(Activator.PLUGIN_ID, "Accept-Encoding: gzip,deflate added to request header"); //$NON-NLS-1$
+					setContentCompressionEnabled(rcfgBuilder, true);
+					contentCompressionEnabled = true;
+				} else {
+					// Disable the interceptors to provide gzip
+					Trace.trace(Activator.PLUGIN_ID, "Accept-Encoding NOT added to header"); //$NON-NLS-1$
+					setContentCompressionEnabled(rcfgBuilder, false);
+					contentCompressionEnabled = false;
 				}
-				fireTransferReceiveDoneEvent();
-			} else {
-				IncomingFileTransferException ex = (IncomingFileTransferException) ((e instanceof IncomingFileTransferException) ? e : new IncomingFileTransferException(NLS.bind(Messages.HttpClientRetrieveFileTransfer_EXCEPTION_COULD_NOT_CONNECT, urlString), e, code));
-				throw ex;
+				httpRequest = rcfgBuilder.build();
+
+				fireConnectStartEvent();
+				if (checkAndHandleDone()) {
+					return;
+				}
+
+				// Actually execute get and get response code (since redirect is set to true, then
+				// redirect response code handled internally
+				if (connectJob == null) {
+					performConnect(new NullProgressMonitor());
+				} else {
+					connectJob.schedule();
+					connectJob.join();
+					connectJob = null;
+				}
+				if (checkAndHandleDone()) {
+					return;
+				}
+
+				code = responseCode;
+
+				responseHeaders = getResponseHeaders();
+
+				Trace.trace(Activator.PLUGIN_ID, "retrieve resp=" + code); //$NON-NLS-1$
+
+				// Check for NTLM proxy in response headers
+				// This check is to deal with bug https://bugs.eclipse.org/bugs/show_bug.cgi?id=252002
+				boolean ntlmProxyFound = NTLMProxyDetector.detectNTLMProxy(httpContext);
+				if (ntlmProxyFound)
+					ECFHttpClientFactory.getNTLMProxyHandler(httpContext).handleNTLMProxy(getProxy(), code);
+
+				if (NTLMProxyDetector.detectSPNEGOProxy(httpContext))
+					ECFHttpClientFactory.getNTLMProxyHandler(httpContext).handleSPNEGOProxy(getProxy(), code);
+
+				if (code == HttpURLConnection.HTTP_PARTIAL || code == HttpURLConnection.HTTP_OK) {
+					getResponseHeaderValues();
+					HttpResponse<InputStream> response = httpResponse.join();
+					InputStream body = response.body();
+					if (contentCompressionEnabled) {
+						if (GZIP_ENCODING
+								.equalsIgnoreCase(response.headers().firstValue(CONTENT_ENCODING_HEADER).orElse(null))) {
+							body = new GZIPInputStream(body);
+						}
+					}
+					setInputStream(body);
+					fireReceiveStartEvent();
+				} else if (code == HttpURLConnection.HTTP_NOT_FOUND) {
+					consume(httpResponse);
+					throw new IncomingFileTransferException(NLS.bind("File not found: {0}", urlString), code); //$NON-NLS-1$
+				} else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
+					consume(httpResponse);
+					throw new IncomingFileTransferException(Messages.HttpClientRetrieveFileTransfer_Unauthorized, code);
+				} else if (code == HttpURLConnection.HTTP_FORBIDDEN) {
+					consume(httpResponse);
+					throw new IncomingFileTransferException("Forbidden", code); //$NON-NLS-1$
+				} else if (code == HttpURLConnection.HTTP_PROXY_AUTH) {
+					consume(httpResponse);
+					throw new IncomingFileTransferException(Messages.HttpClientRetrieveFileTransfer_Proxy_Auth_Required, code);
+				} else {
+					consume(httpResponse);
+					throw new IncomingFileTransferException(NLS.bind(Messages.HttpClientRetrieveFileTransfer_ERROR_GENERAL_RESPONSE_CODE, Integer.valueOf(code)), code);
+				}
+				
+				// Success - exit retry loop
+				Trace.exiting(Activator.PLUGIN_ID, DebugOptions.METHODS_EXITING, this.getClass(), "openStreams"); //$NON-NLS-1$
+				return;
+				
+			} catch (final Exception e) {
+				Trace.throwing(Activator.PLUGIN_ID, DebugOptions.EXCEPTIONS_THROWING, this.getClass(), "openStreams", e); //$NON-NLS-1$
+				lastException = e;
+				
+				System.out.println("Exception caught in openStreams: " + e.getClass().getName() + ": " + e.getMessage());
+				System.out.println("Is retryable: " + isRetryableException(e) + ", attempt " + attemptCount + " of " + maxAttempts);
+				
+				// Check if we should retry
+				if (attemptCount < maxAttempts && isRetryableException(e)) {
+					System.out.println("Retrying due to: " + e.getMessage());
+					Trace.trace(Activator.PLUGIN_ID, "Retryable exception on attempt " + attemptCount + ": " + e.getMessage()); //$NON-NLS-1$ //$NON-NLS-2$
+					continue; // Retry
+				}
+				
+				// No more retries or non-retryable exception - handle and throw
+				if (code == -1) {
+					if (!isDone()) {
+						setDoneException(e);
+					}
+					fireTransferReceiveDoneEvent();
+				} else {
+					IncomingFileTransferException ex = (IncomingFileTransferException) ((e instanceof IncomingFileTransferException) ? e : new IncomingFileTransferException(NLS.bind(Messages.HttpClientRetrieveFileTransfer_EXCEPTION_COULD_NOT_CONNECT, urlString), e, code));
+					throw ex;
+				}
+				break; // Exit retry loop
 			}
 		}
+		
+		// If we get here, all retries failed
+		if (lastException != null) {
+			throw new IncomingFileTransferException(NLS.bind(Messages.HttpClientRetrieveFileTransfer_EXCEPTION_COULD_NOT_CONNECT, urlString), lastException);
+		}
+		
 		Trace.exiting(Activator.PLUGIN_ID, DebugOptions.METHODS_EXITING, this.getClass(), "openStreams"); //$NON-NLS-1$
 	}
 
@@ -808,86 +852,132 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 		final String urlString = getRemoteFileURL().toString();
 		this.doneFired = false;
 
-		int code = -1;
+		Exception lastException = null;
+		int attemptCount = 0;
+		int maxAttempts = MAX_RETRY + 1; // MAX_RETRY is number of retries, so total attempts = retries + 1
 
-		try {
-			Builder builder = requestConfigBuilder.copy();
-			setContentCompressionEnabled(builder, false);
+		// Retry loop for idempotent methods
+		while (attemptCount < maxAttempts) {
+			attemptCount++;
+			int code = -1;
 
-			setupAuthentication(urlString);
-
-			// Define a CredentialsProvider - found that possibility while debugging in org.apache.commons.httpclient.HttpMethodDirector.processProxyAuthChallenge(HttpMethod)
-			// Seems to be another way to select the credentials.
-			setResumeRequestHeaderValues(builder);
-
-			Trace.trace(Activator.PLUGIN_ID, "resume=" + urlString); //$NON-NLS-1$
-			httpRequest = builder.build();
-
-			// Gzip encoding is not an option for resume
-			fireConnectStartEvent();
-			if (checkAndHandleDone()) {
-				return false;
-			}
-
-			// Actually execute get and get response code (since redirect is set to true, then
-			// redirect response code handled internally
-			if (connectJob == null) {
-				performConnect(new NullProgressMonitor());
-			} else {
-				connectJob.schedule();
-				connectJob.join();
-				connectJob = null;
-			}
-			if (checkAndHandleDone()) {
-				return false;
-			}
-
-			code = responseCode;
-
-			responseHeaders = getResponseHeaders();
-
-			Trace.trace(Activator.PLUGIN_ID, "retrieve resp=" + code); //$NON-NLS-1$
-
-			if (code == HttpURLConnection.HTTP_PARTIAL || code == HttpURLConnection.HTTP_OK) {
-				getResumeResponseHeaderValues();
-				setInputStream(httpResponse.join().body());
-				this.paused = false;
-				fireReceiveResumedEvent();
-			} else if (code == HttpURLConnection.HTTP_NOT_FOUND) {
-				consume(httpResponse);
-				throw new IncomingFileTransferException(NLS.bind("File not found: {0}", urlString), code); //$NON-NLS-1$
-			} else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
-				consume(httpResponse);
-				throw new IncomingFileTransferException(Messages.HttpClientRetrieveFileTransfer_Unauthorized, code);
-			} else if (code == HttpURLConnection.HTTP_FORBIDDEN) {
-				consume(httpResponse);
-				throw new IncomingFileTransferException("Forbidden", code); //$NON-NLS-1$
-			} else if (code == HttpURLConnection.HTTP_PROXY_AUTH) {
-				consume(httpResponse);
-				throw new IncomingFileTransferException(Messages.HttpClientRetrieveFileTransfer_Proxy_Auth_Required,
-						code);
-			} else {
-				consume(httpResponse);
-				throw new IncomingFileTransferException(
-						NLS.bind(Messages.HttpClientRetrieveFileTransfer_ERROR_GENERAL_RESPONSE_CODE,
-								Integer.valueOf(code)),
-						code);
-			}
-			Trace.exiting(Activator.PLUGIN_ID, DebugOptions.METHODS_EXITING, this.getClass(), "openStreamsForResume", Boolean.TRUE); //$NON-NLS-1$
-			return true;
-		} catch (final Exception e) {
-			Trace.catching(Activator.PLUGIN_ID, DebugOptions.EXCEPTIONS_CATCHING, this.getClass(), "openStreamsForResume", e); //$NON-NLS-1$
-			if (code == -1) {
-				if (!isDone()) {
-					setDoneException(e);
+			try {
+				if (attemptCount > 1) {
+					Trace.trace(Activator.PLUGIN_ID, "Retry attempt " + attemptCount + " of " + maxAttempts + " for resume " + urlString); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					// Brief delay between retries to allow transient conditions to clear
+					try {
+						Thread.sleep(100 * (attemptCount - 1)); // Progressive backoff: 0ms, 100ms, 200ms
+					} catch (InterruptedException ie) {
+						Thread.currentThread().interrupt();
+						setDoneException(new IncomingFileTransferException("Interrupted during retry", ie));
+						fireTransferReceiveDoneEvent();
+						return false;
+					}
 				}
-			} else {
-				setDoneException((e instanceof IncomingFileTransferException) ? e : new IncomingFileTransferException(NLS.bind(Messages.HttpClientRetrieveFileTransfer_EXCEPTION_COULD_NOT_CONNECT, urlString), e, code, responseHeaders));
+
+				Builder builder = requestConfigBuilder.copy();
+				setContentCompressionEnabled(builder, false);
+
+				setupAuthentication(urlString);
+
+				// Define a CredentialsProvider - found that possibility while debugging in org.apache.commons.httpclient.HttpMethodDirector.processProxyAuthChallenge(HttpMethod)
+				// Seems to be another way to select the credentials.
+				setResumeRequestHeaderValues(builder);
+
+				Trace.trace(Activator.PLUGIN_ID, "resume=" + urlString); //$NON-NLS-1$
+				httpRequest = builder.build();
+
+				// Gzip encoding is not an option for resume
+				fireConnectStartEvent();
+				if (checkAndHandleDone()) {
+					return false;
+				}
+
+				// Actually execute get and get response code (since redirect is set to true, then
+				// redirect response code handled internally
+				if (connectJob == null) {
+					performConnect(new NullProgressMonitor());
+				} else {
+					connectJob.schedule();
+					connectJob.join();
+					connectJob = null;
+				}
+				if (checkAndHandleDone()) {
+					return false;
+				}
+
+				code = responseCode;
+
+				responseHeaders = getResponseHeaders();
+
+				Trace.trace(Activator.PLUGIN_ID, "retrieve resp=" + code); //$NON-NLS-1$
+
+				if (code == HttpURLConnection.HTTP_PARTIAL || code == HttpURLConnection.HTTP_OK) {
+					getResumeResponseHeaderValues();
+					setInputStream(httpResponse.join().body());
+					this.paused = false;
+					fireReceiveResumedEvent();
+				} else if (code == HttpURLConnection.HTTP_NOT_FOUND) {
+					consume(httpResponse);
+					throw new IncomingFileTransferException(NLS.bind("File not found: {0}", urlString), code); //$NON-NLS-1$
+				} else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
+					consume(httpResponse);
+					throw new IncomingFileTransferException(Messages.HttpClientRetrieveFileTransfer_Unauthorized, code);
+				} else if (code == HttpURLConnection.HTTP_FORBIDDEN) {
+					consume(httpResponse);
+					throw new IncomingFileTransferException("Forbidden", code); //$NON-NLS-1$
+				} else if (code == HttpURLConnection.HTTP_PROXY_AUTH) {
+					consume(httpResponse);
+					throw new IncomingFileTransferException(Messages.HttpClientRetrieveFileTransfer_Proxy_Auth_Required,
+							code);
+				} else {
+					consume(httpResponse);
+					throw new IncomingFileTransferException(
+							NLS.bind(Messages.HttpClientRetrieveFileTransfer_ERROR_GENERAL_RESPONSE_CODE,
+									Integer.valueOf(code)),
+							code);
+				}
+				
+				// Success - exit retry loop
+				Trace.exiting(Activator.PLUGIN_ID, DebugOptions.METHODS_EXITING, this.getClass(), "openStreamsForResume", Boolean.TRUE); //$NON-NLS-1$
+				return true;
+				
+			} catch (final Exception e) {
+				Trace.catching(Activator.PLUGIN_ID, DebugOptions.EXCEPTIONS_CATCHING, this.getClass(), "openStreamsForResume", e); //$NON-NLS-1$
+				lastException = e;
+				
+				System.out.println("Exception caught in openStreamsForResume: " + e.getClass().getName() + ": " + e.getMessage());
+				System.out.println("Is retryable: " + isRetryableException(e) + ", attempt " + attemptCount + " of " + maxAttempts);
+				
+				// Check if we should retry
+				if (attemptCount < maxAttempts && isRetryableException(e)) {
+					System.out.println("Retrying resume due to: " + e.getMessage());
+					Trace.trace(Activator.PLUGIN_ID, "Retryable exception on resume attempt " + attemptCount + ": " + e.getMessage()); //$NON-NLS-1$ //$NON-NLS-2$
+					continue; // Retry
+				}
+				
+				// No more retries or non-retryable exception - handle and return failure
+				if (code == -1) {
+					if (!isDone()) {
+						setDoneException(e);
+					}
+				} else {
+					setDoneException((e instanceof IncomingFileTransferException) ? e : new IncomingFileTransferException(NLS.bind(Messages.HttpClientRetrieveFileTransfer_EXCEPTION_COULD_NOT_CONNECT, urlString), e, code, responseHeaders));
+				}
+				fireTransferReceiveDoneEvent();
+				Trace.exiting(Activator.PLUGIN_ID, DebugOptions.METHODS_EXITING, this.getClass(), "openStreamsForResume", Boolean.FALSE); //$NON-NLS-1$
+				return false;
 			}
-			fireTransferReceiveDoneEvent();
-			Trace.exiting(Activator.PLUGIN_ID, DebugOptions.METHODS_EXITING, this.getClass(), "openStreamsForResume", Boolean.FALSE); //$NON-NLS-1$
-			return false;
 		}
+		
+		// If we get here, all retries failed
+		if (lastException != null) {
+			setDoneException(new IncomingFileTransferException(NLS.bind(Messages.HttpClientRetrieveFileTransfer_EXCEPTION_COULD_NOT_CONNECT, urlString), lastException));
+			fireTransferReceiveDoneEvent();
+		}
+		
+		Trace.exiting(Activator.PLUGIN_ID, DebugOptions.METHODS_EXITING, this.getClass(), "openStreamsForResume", Boolean.FALSE); //$NON-NLS-1$
+		return false;
 	}
 
 	protected void getResumeResponseHeaderValues() throws IOException {
@@ -1062,6 +1152,128 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 	protected void fireTransferReceivePausedEvent() {
 		Trace.entering(Activator.PLUGIN_ID, DebugOptions.METHODS_ENTERING, this.getClass(), "fireTransferReceivePausedEvent len=" + fileLength + ";rcvd=" + bytesReceived); //$NON-NLS-1$ //$NON-NLS-2$
 		super.fireTransferReceivePausedEvent();
+	}
+
+	/**
+	 * Detects if an exception is caused by HTTP/2 GOAWAY frame.
+	 * GOAWAY exceptions are generic IOExceptions that can be identified by:
+	 * 1. Method Http2Connection.handleGoAway in the stacktrace
+	 * 2. Message containing "GOAWAY"
+	 * 
+	 * @param e the exception to check
+	 * @return true if this appears to be a GOAWAY exception
+	 */
+	private boolean isGoAwayException(Exception e) {
+		if (e == null) {
+			return false;
+		}
+		
+		// Check exception message for GOAWAY
+		String message = e.getMessage();
+		if (message != null && message.toUpperCase().contains("GOAWAY")) {
+			System.out.println("GOAWAY detected in message: " + message);
+			return true;
+		}
+		
+		// Check stacktrace for Http2Connection.handleGoAway method
+		StackTraceElement[] stackTrace = e.getStackTrace();
+		if (stackTrace != null) {
+			for (StackTraceElement element : stackTrace) {
+				String className = element.getClassName();
+				String methodName = element.getMethodName();
+				if (className != null && methodName != null) {
+					if (className.contains("Http2Connection") && methodName.contains("handleGoAway")) {
+						System.out.println("GOAWAY detected in stacktrace: " + className + "." + methodName);
+						return true;
+					}
+					// Also check for other HTTP/2 connection closing methods
+					if (className.contains("Http2") && (methodName.contains("goAway") || methodName.contains("GoAway"))) {
+						System.out.println("GOAWAY detected in stacktrace (alt): " + className + "." + methodName);
+						return true;
+					}
+				}
+			}
+		}
+		
+		// Check cause recursively
+		Throwable cause = e.getCause();
+		if (cause != null) {
+			if (cause instanceof Exception) {
+				return isGoAwayException((Exception) cause);
+			} else {
+				// Check the cause even if it's not an Exception
+				String causeMessage = cause.getMessage();
+				if (causeMessage != null && causeMessage.toUpperCase().contains("GOAWAY")) {
+					System.out.println("GOAWAY detected in cause message: " + causeMessage);
+					return true;
+				}
+			}
+		}
+		
+		return false;
+	}
+
+	/**
+	 * Determines if the HTTP method is idempotent and can be safely retried.
+	 * Currently supports GET and HEAD methods.
+	 * 
+	 * @return true if the request method is idempotent (GET or HEAD)
+	 */
+	private boolean isIdempotentMethod() {
+		// For retrieve file transfer, we only use GET and HEAD
+		// GET is the primary method used for file retrieval
+		// HEAD might be used for metadata queries
+		// Both are idempotent and safe to retry
+		return true; // HttpClientRetrieveFileTransfer only uses GET/HEAD
+	}
+
+	/**
+	 * Determines if an exception is retryable.
+	 * Exceptions are retryable if:
+	 * 1. It's a GOAWAY exception (treated as temporary server condition)
+	 * 2. It's an IOException that might be transient
+	 * 3. The request method is idempotent
+	 * 
+	 * @param e the exception to check
+	 * @return true if the exception warrants a retry
+	 */
+	private boolean isRetryableException(Exception e) {
+		if (!isIdempotentMethod()) {
+			return false;
+		}
+		
+		// GOAWAY should be treated as a temporary condition similar to timeout
+		if (isGoAwayException(e)) {
+			System.out.println("GOAWAY exception detected - marking as retryable");
+			Trace.trace(Activator.PLUGIN_ID, "GOAWAY detected - treating as retryable temporary error"); //$NON-NLS-1$
+			return true;
+		}
+		
+		// Other IOExceptions might also be retryable for idempotent requests
+		if (e instanceof IOException) {
+			System.out.println("IOException detected - marking as retryable: " + e.getClass().getName());
+			return true;
+		}
+		
+		if (e instanceof ExecutionException) {
+			Throwable cause = e.getCause();
+			if (cause instanceof IOException) {
+				System.out.println("ExecutionException with IOException cause - marking as retryable");
+				return true;
+			}
+		}
+		
+		// Check if it's an IncomingFileTransferException wrapping a retryable exception
+		if (e instanceof IncomingFileTransferException) {
+			Throwable cause = e.getCause();
+			if (cause instanceof Exception) {
+				System.out.println("Checking wrapped exception: " + cause.getClass().getName());
+				return isRetryableException((Exception) cause);
+			}
+		}
+		
+		System.out.println("Exception not retryable: " + e.getClass().getName());
+		return false;
 	}
 
 }
