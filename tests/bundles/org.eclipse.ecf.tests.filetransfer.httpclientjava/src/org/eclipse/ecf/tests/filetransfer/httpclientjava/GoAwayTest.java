@@ -23,6 +23,7 @@ import org.eclipse.ecf.filetransfer.identity.IFileID;
 import org.eclipse.ecf.tests.filetransfer.AbstractRetrieveTestCase;
 import org.eclipse.ecf.tests.filetransfer.httpclientjava.http2.Http2ServerWithGoaway;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.Constants;
 import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceRegistration;
 
@@ -83,6 +84,7 @@ public class GoAwayTest extends AbstractRetrieveTestCase {
 		};
 		
 		Dictionary<String, Object> properties = new Hashtable<>();
+		properties.put(Constants.SERVICE_RANKING, 100);
 		sslContextFactoryRegistration = context.registerService(SSLContextFactory.class, trustAllFactory, properties);
 		
 	    server = new Http2ServerWithGoaway(8433);
