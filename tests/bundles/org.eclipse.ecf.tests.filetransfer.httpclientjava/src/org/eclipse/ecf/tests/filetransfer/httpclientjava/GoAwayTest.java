@@ -1,12 +1,12 @@
 /****************************************************************************
- * Copyright (c) 2025 Christoph Läubrich and others.
+ * Copyright (c) 2025 Christoph Lï¿½ubrich and others.
  *
  * This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License 2.0
  * which is available at https://www.eclipse.org/legal/epl-2.0/
  *
  * Contributors:
- *    Christoph Läubrich - initial API and implementation
+ *    Christoph Lï¿½ubrich - initial API and implementation
  *
  * SPDX-License-Identifier: EPL-2.0
  *****************************************************************************/
@@ -39,6 +39,9 @@ public class GoAwayTest extends AbstractRetrieveTestCase {
 		tmpFile = Files.createTempFile("ECFTest", "").toFile();
 		sslContextFactory = new TrustAllSSLContextFactory();
 		server = new Http2ServerWithGoaway(8433);
+		// Configure server to send GOAWAY after the first request
+		// This will test the retry logic
+		server.setGoawayAfterRequests(1);
 	}
 
 	@Override
