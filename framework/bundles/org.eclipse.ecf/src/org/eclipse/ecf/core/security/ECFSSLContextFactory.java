@@ -108,4 +108,18 @@ public class ECFSSLContextFactory implements SSLContextFactory {
 		return getInstance0(protocol, providerName);
 	}
 
+	@Override
+	public SSLContext getInstance(String protocol, Provider provider) throws NoSuchAlgorithmException {
+		if (protocol == null) {
+			try {
+				return SSLContext.getDefault();
+			} catch (NoSuchAlgorithmException e) {
+				throw e;
+			}
+		}
+		if (provider == null)
+			throw new IllegalArgumentException("provider must not be null"); //$NON-NLS-1$
+		return SSLContext.getInstance(protocol, provider);
+	}
+
 }

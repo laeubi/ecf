@@ -13,6 +13,7 @@ package org.eclipse.ecf.core.security;
 
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.Provider;
 import javax.net.ssl.SSLContext;
 
 /**
@@ -37,8 +38,13 @@ public interface SSLContextFactory {
 	SSLContext getInstance(String protocol) throws NoSuchAlgorithmException, NoSuchProviderException;
 
 	/**
-	 * See <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/javax/net/ssl/SSLContext.html#getInstance(java.lang.String,java.security.Provider)">SSLContext.getInstance(String protocol, String provider)</a><br>
+	 * See <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/javax/net/ssl/SSLContext.html#getInstance(java.lang.String,java.lang.String)">SSLContext.getInstance(String protocol, String provider)</a><br>
 	 */
 	SSLContext getInstance(String protocol, String providerName) throws NoSuchAlgorithmException, NoSuchProviderException;
+
+	/**
+	 * See <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/javax/net/ssl/SSLContext.html#getInstance(java.lang.String,java.security.Provider)">SSLContext.getInstance(String protocol, Provider provider)</a><br>
+	 */
+	SSLContext getInstance(String protocol, Provider provider) throws NoSuchAlgorithmException;
 
 }

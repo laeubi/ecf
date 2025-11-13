@@ -53,4 +53,11 @@ public class SSLContextFactoryTest extends TestCase {
 		assertNotNull(context);
 	}
 	
+	public void testSSLContextGetInstanceWithProvider() throws Exception {
+		Provider provider = SSLContext.getDefault().getProvider();
+		SSLContext context = this.sslContextFactory.getInstance(testProtocol, provider);
+		assertNotNull(context);
+		assertEquals(provider, context.getProvider());
+	}
+	
 }
