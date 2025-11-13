@@ -649,8 +649,12 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 				Trace.throwing(Activator.PLUGIN_ID, DebugOptions.EXCEPTIONS_THROWING, this.getClass(), "openStreams", e); //$NON-NLS-1$
 				lastException = e;
 				
+				System.out.println("Exception caught in openStreams: " + e.getClass().getName() + ": " + e.getMessage());
+				System.out.println("Is retryable: " + isRetryableException(e) + ", attempt " + attemptCount + " of " + maxAttempts);
+				
 				// Check if we should retry
 				if (attemptCount < maxAttempts && isRetryableException(e)) {
+					System.out.println("Retrying due to: " + e.getMessage());
 					Trace.trace(Activator.PLUGIN_ID, "Retryable exception on attempt " + attemptCount + ": " + e.getMessage()); //$NON-NLS-1$ //$NON-NLS-2$
 					continue; // Retry
 				}
@@ -1162,7 +1166,8 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 		
 		// Check exception message for GOAWAY
 		String message = e.getMessage();
-		if (message != null && message.contains("GOAWAY")) {
+		if (message != null && message.toUpperCase().contains("GOAWAY")) {
+			System.out.println("GOAWAY detected in message: " + message);
 			return true;
 		}
 		
@@ -1173,7 +1178,8 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 				String className = element.getClassName();
 				String methodName = element.getMethodName();
 				if (className != null && methodName != null) {
-					if (className.endsWith("Http2Connection") && methodName.equals("handleGoAway")) {
+					if (className.contains("Http2Connection") && methodName.contains("handleGoAway")) {
+						System.out.println("GOAWAY detected in stacktrace: " + className + "." + methodName);
 						return true;
 					}
 				}
@@ -1182,8 +1188,17 @@ public class HttpClientRetrieveFileTransfer extends AbstractRetrieveFileTransfer
 		
 		// Check cause recursively
 		Throwable cause = e.getCause();
-		if (cause instanceof Exception) {
-			return isGoAwayException((Exception) cause);
+		if (cause != null) {
+			if (cause instanceof Exception) {
+				return isGoAwayException((Exception) cause);
+			} else {
+				// Check the cause even if it's not an Exception
+				String causeMessage = cause.getMessage();
+				if (causeMessage != null && causeMessage.toUpperCase().contains("GOAWAY")) {
+					System.out.println("GOAWAY detected in cause message: " + causeMessage);
+					return true;
+				}
+			}
 		}
 		
 		return false;
