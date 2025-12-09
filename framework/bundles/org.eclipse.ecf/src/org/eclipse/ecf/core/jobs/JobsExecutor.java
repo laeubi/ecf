@@ -16,9 +16,12 @@ package org.eclipse.ecf.core.jobs;
 import org.eclipse.core.runtime.*;
 import org.eclipse.core.runtime.jobs.ISchedulingRule;
 import org.eclipse.core.runtime.jobs.Job;
-import org.eclipse.equinox.concurrent.future.*;
 
 /**
+ * Executor that runs tasks as Eclipse Jobs.
+ * This implementation has been updated to use ECF-native interfaces
+ * instead of org.eclipse.equinox.concurrent to eliminate that dependency.
+ * 
  * @since 3.2
  */
 public class JobsExecutor extends AbstractExecutor {
