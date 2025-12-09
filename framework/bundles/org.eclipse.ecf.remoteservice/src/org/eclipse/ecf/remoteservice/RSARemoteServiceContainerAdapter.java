@@ -14,7 +14,7 @@ package org.eclipse.ecf.remoteservice;
 
 import java.util.Dictionary;
 import java.util.Map;
-import org.eclipse.equinox.concurrent.future.IExecutor;
+import org.eclipse.ecf.core.jobs.IExecutor;
 
 /**
  * A container adapter intended for use by remote service host containers.  Implements IRemoteServiceContainerAdapter

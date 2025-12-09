@@ -14,8 +14,8 @@
 package org.eclipse.ecf.remoteservice;
 
 import org.eclipse.core.runtime.Assert;
+import org.eclipse.ecf.core.jobs.IFuture;
 import org.eclipse.ecf.core.util.ECFException;
-import org.eclipse.equinox.concurrent.future.IFuture;
 
 /**
  * Helper class for making it easier to call a remote service with method name and optional parameters.

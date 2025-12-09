@@ -17,11 +17,11 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import org.eclipse.core.runtime.Assert;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.ecf.core.jobs.*;
 import org.eclipse.ecf.core.util.ECFException;
 import org.eclipse.ecf.remoteservice.*;
 import org.eclipse.ecf.remoteservice.events.IRemoteCallCompleteEvent;
 import org.eclipse.ecf.remoteservice.events.IRemoteCallStartEvent;
-import org.eclipse.equinox.concurrent.future.*;
 
 /**
  * Remote service client service.  Implements {@link IRemoteService}.

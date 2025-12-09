@@ -13,8 +13,8 @@
 
 package org.eclipse.ecf.remoteservice;
 
+import org.eclipse.ecf.core.jobs.IFuture;
 import org.eclipse.ecf.core.util.ECFException;
-import org.eclipse.equinox.concurrent.future.IFuture;
 
 /**
  * Interface providing runtime access to a remote service. An instance
