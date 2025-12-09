@@ -23,6 +23,8 @@ import org.eclipse.core.runtime.*;
  * @since 3.13
  */
 public abstract class AbstractFuture implements IFuture, ISafeProgressRunner {
+	private static final String BUNDLE_ID = "org.eclipse.ecf"; //$NON-NLS-1$
+	
 	private volatile boolean canceled = false;
 	private volatile boolean done = false;
 	private volatile Object result;
@@ -49,12 +51,15 @@ public abstract class AbstractFuture implements IFuture, ISafeProgressRunner {
 	}
 
 	public synchronized Object get(long waitTimeInMillis) throws InterruptedException, TimeoutException, ExecutionException {
-		long startTime = System.currentTimeMillis();
-		long waitTime = waitTimeInMillis;
-		while (!done && !canceled && waitTime > 0) {
-			wait(waitTime);
-			long elapsed = System.currentTimeMillis() - startTime;
-			waitTime = waitTimeInMillis - elapsed;
+		long startTime = System.nanoTime();
+		long waitTimeNanos = waitTimeInMillis * 1_000_000L;
+		long remainingNanos = waitTimeNanos;
+		while (!done && !canceled && remainingNanos > 0) {
+			long waitMillis = remainingNanos / 1_000_000L;
+			int waitNanos = (int) (remainingNanos % 1_000_000L);
+			wait(waitMillis, waitNanos);
+			long elapsed = System.nanoTime() - startTime;
+			remainingNanos = waitTimeNanos - elapsed;
 		}
 		if (!done && !canceled) {
 			throw new TimeoutException("Timeout waiting for result"); //$NON-NLS-1$
@@ -107,14 +112,14 @@ public abstract class AbstractFuture implements IFuture, ISafeProgressRunner {
 		}
 		if (done) {
 			if (exception != null) {
-				return new Status(IStatus.ERROR, "org.eclipse.ecf", "Execution failed", exception); //$NON-NLS-1$ //$NON-NLS-2$
+				return new Status(IStatus.ERROR, BUNDLE_ID, "Execution failed", exception); //$NON-NLS-1$
 			}
 			return Status.OK_STATUS;
 		}
 		if (canceled) {
 			return Status.CANCEL_STATUS;
 		}
-		return new Status(IStatus.INFO, "org.eclipse.ecf", "Running"); //$NON-NLS-1$ //$NON-NLS-2$
+		return new Status(IStatus.INFO, BUNDLE_ID, "Running"); //$NON-NLS-1$
 	}
 
 	protected synchronized void setStatus(IStatus status) {
@@ -131,7 +136,7 @@ public abstract class AbstractFuture implements IFuture, ISafeProgressRunner {
 			setStatus(Status.CANCEL_STATUS);
 		} catch (Exception e) {
 			setException(e);
-			setStatus(new Status(IStatus.ERROR, "org.eclipse.ecf", "Execution failed", e)); //$NON-NLS-1$ //$NON-NLS-2$
+			setStatus(new Status(IStatus.ERROR, BUNDLE_ID, "Execution failed", e)); //$NON-NLS-1$
 		} finally {
 			if (progressMonitor != null) {
 				progressMonitor.done();
