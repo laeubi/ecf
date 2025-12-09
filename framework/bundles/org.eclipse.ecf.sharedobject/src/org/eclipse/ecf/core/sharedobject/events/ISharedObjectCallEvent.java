@@ -11,7 +11,7 @@
  *****************************************************************************/
 package org.eclipse.ecf.core.sharedobject.events;
 
-import org.eclipse.equinox.concurrent.future.IFuture;
+import org.eclipse.ecf.core.jobs.IFuture;
 
 public interface ISharedObjectCallEvent extends ISharedObjectEvent {
 	/**

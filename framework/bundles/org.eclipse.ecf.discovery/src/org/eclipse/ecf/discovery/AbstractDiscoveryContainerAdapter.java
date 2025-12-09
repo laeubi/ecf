@@ -21,7 +21,7 @@ import org.eclipse.ecf.core.util.Trace;
 import org.eclipse.ecf.discovery.identity.IServiceID;
 import org.eclipse.ecf.discovery.identity.IServiceTypeID;
 import org.eclipse.ecf.internal.discovery.*;
-import org.eclipse.equinox.concurrent.future.*;
+import org.eclipse.ecf.core.jobs.*;
 
 public abstract class AbstractDiscoveryContainerAdapter extends AbstractContainer
 		implements IDiscoveryLocator, IDiscoveryAdvertiser {

@@ -14,8 +14,8 @@
 package org.eclipse.ecf.core.sharedobject.events;
 
 import org.eclipse.ecf.core.identity.ID;
+import org.eclipse.ecf.core.jobs.IFuture;
 import org.eclipse.ecf.core.util.Event;
-import org.eclipse.equinox.concurrent.future.IFuture;
 
 public class SharedObjectCallEvent implements ISharedObjectCallEvent {
 	ID sender;

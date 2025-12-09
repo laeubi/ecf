@@ -15,9 +15,9 @@ package org.eclipse.ecf.discovery;
 
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.ecf.core.identity.Namespace;
+import org.eclipse.ecf.core.jobs.IFuture;
 import org.eclipse.ecf.discovery.identity.IServiceID;
 import org.eclipse.ecf.discovery.identity.IServiceTypeID;
-import org.eclipse.equinox.concurrent.future.IFuture;
 
 /**
  * Entry point discovery locator. This interface exposes the ability to
