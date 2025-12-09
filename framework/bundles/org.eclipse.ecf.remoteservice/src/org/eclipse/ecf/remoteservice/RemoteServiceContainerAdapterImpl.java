@@ -10,10 +10,10 @@ import org.eclipse.ecf.core.IContainer;
 import org.eclipse.ecf.core.identity.*;
 import org.eclipse.ecf.core.security.IConnectContext;
 import org.eclipse.ecf.core.util.Trace;
+import org.eclipse.ecf.core.jobs.*;
 import org.eclipse.ecf.internal.remoteservice.Activator;
 import org.eclipse.ecf.remoteservice.events.*;
 import org.eclipse.ecf.remoteservice.util.RemoteFilterImpl;
-import org.eclipse.equinox.concurrent.future.*;
 import org.osgi.framework.InvalidSyntaxException;
 
 /**

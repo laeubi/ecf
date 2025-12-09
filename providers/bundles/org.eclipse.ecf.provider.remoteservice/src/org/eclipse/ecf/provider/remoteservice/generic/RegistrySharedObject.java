@@ -33,7 +33,7 @@ import org.eclipse.ecf.remoteservice.*;
 import org.eclipse.ecf.remoteservice.asyncproxy.AsyncReturnUtil;
 import org.eclipse.ecf.remoteservice.events.*;
 import org.eclipse.ecf.remoteservice.util.AsyncUtil;
-import org.eclipse.equinox.concurrent.future.*;
+import org.eclipse.ecf.core.jobs.*;
 import org.eclipse.osgi.framework.eventmgr.*;
 import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.ServiceException;

@@ -16,8 +16,8 @@ import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.ecf.core.ContainerConnectException;
 import org.eclipse.ecf.core.identity.ID;
 import org.eclipse.ecf.core.identity.Namespace;
+import org.eclipse.ecf.core.jobs.IFuture;
 import org.eclipse.ecf.core.security.IConnectContext;
-import org.eclipse.equinox.concurrent.future.IFuture;
 import org.osgi.framework.*;
 
 /**

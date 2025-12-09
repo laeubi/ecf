@@ -20,7 +20,7 @@ import org.eclipse.ecf.core.ContainerConnectException;
 import org.eclipse.ecf.core.events.*;
 import org.eclipse.ecf.core.identity.ID;
 import org.eclipse.ecf.core.identity.Namespace;
-import org.eclipse.ecf.core.jobs.JobsExecutor;
+import org.eclipse.ecf.core.jobs.*;
 import org.eclipse.ecf.core.security.IConnectContext;
 import org.eclipse.ecf.internal.remoteservice.Activator;
 import org.eclipse.ecf.remoteservice.*;
@@ -28,7 +28,6 @@ import org.eclipse.ecf.remoteservice.client.AbstractClientService.UriRequest;
 import org.eclipse.ecf.remoteservice.events.IRemoteServiceEvent;
 import org.eclipse.ecf.remoteservice.events.IRemoteServiceRegisteredEvent;
 import org.eclipse.ecf.remoteservice.util.RemoteFilterImpl;
-import org.eclipse.equinox.concurrent.future.*;
 import org.osgi.framework.InvalidSyntaxException;
 
 /**

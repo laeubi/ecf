@@ -1,7 +1,7 @@
 package org.eclipse.ecf.remoteservice.events;
 
 import org.eclipse.ecf.core.identity.ID;
-import org.eclipse.equinox.concurrent.future.IFuture;
+import org.eclipse.ecf.core.jobs.IFuture;
 
 /**
  * @since 3.0

@@ -131,7 +131,7 @@ public interface Constants {
 	 * <pre>
 	 * package foo;
 	 * import org.eclipse.ecf.remoteservice.IAsyncRemoteServiceProxy;
-	 * import org.eclipse.equinox.concurrent.future.IFuture;
+	 * import org.eclipse.ecf.core.jobs.IFuture;
 	 *
 	 * public interface BarAsync extends IAsyncRemoteServiceProxy {
 	 *    IFuture doStuffAsync();
@@ -145,7 +145,7 @@ public interface Constants {
 	 * <pre>
 	 * package gogo;
 	 * import org.eclipse.ecf.remoteservice.IAsyncRemoteServiceProxy;
-	 * import org.eclipse.equinox.concurrent.future.IFuture;
+	 * import org.eclipse.ecf.core.jobs.IFuture;
 	 * 
 	 * public interface MyBar extends IAsyncRemoteServiceProxy {
 	 *    IFuture doStuffAsync();
