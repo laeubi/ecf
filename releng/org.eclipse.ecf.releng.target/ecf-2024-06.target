@@ -33,9 +33,7 @@
       <unit id="org.apache.commons.httpclient" version="0.0.0"/>
       <unit id="org.apache.felix.gogo.runtime" version="0.0.0"/>
       <unit id="org.apache.httpcomponents.client5.httpclient5" version="0.0.0"/>
-      <unit id="org.apache.httpcomponents.client5.httpclient5-win" version="0.0.0"/>
       <unit id="org.apache.httpcomponents.httpclient" version="0.0.0"/>
-      <unit id="org.apache.httpcomponents.httpclient.win" version="0.0.0"/>
       <unit id="org.apache.log4j" version="0.0.0"/>
       <unit id="org.apiguardian.api" version="0.0.0"/>
       <unit id="org.bndtools.headless.build.plugin.gradle" version="0.0.0"/>
@@ -82,5 +80,15 @@
       <repository location="https://bndtools.org/bndtools.p2.repo/7.1.0/"/>
       <unit id="bndtools.main.feature.feature.group" version="7.1.0.REL-202411251545-g47e504d"/>
     </location>
+	  <location includeDependencyDepth="infinite" includeDependencyScopes="compile,runtime" includeSource="true" missingManifest="ignore" type="Maven">
+		  <dependencies>
+			  <dependency>
+				  <groupId>io.netty</groupId>
+				  <artifactId>netty-all</artifactId>
+				  <version>4.2.7.Final</version>
+				  <type>jar</type>
+			  </dependency>
+		  </dependencies>
+	  </location>
   </locations>
 </target>
